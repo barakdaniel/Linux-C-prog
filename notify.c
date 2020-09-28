@@ -15,11 +15,104 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include<pthread.h>
+#include <libcli.h>
+#include <signal.h>
+#include <strings.h>
+#include <stdlib.h>
+#include <semaphore.h>
+
 
 #define PORT 5000
 #define TELNET 8000
 char ip[21];
 char path[50];
+int listenOnTelnet = 1;
+int backTracing = 0;
+char telnetBuffer[1024];
+sem_t semaphore;
+
+
+
+/////////////////// Cygnum Functions ///////////////////
+
+void backTrace()
+{
+	memset(telnetBuffer, 0, sizeof(telnetBuffer));
+	strcpy(telnetBuffer, "HELLO WORLD!");
+	
+}
+
+void  __attribute__ ((no_instrument_function))  __cyg_profile_func_enter (void *this_fn,
+                                         void *call_site)
+{
+	if(backTracing)
+	{
+		backTracing = 0;
+        	backTrace();
+        	sem_post(&semaphore);
+        }
+
+}
+
+/////////////////// BackTrace - Telnet Functions ///////////////////
+
+int cmd_backtrace(struct cli_def *cli, char *command, char *argv[], int argc)
+{
+	backTracing = 1;
+	sem_wait(&semaphore);
+	cli_print(cli, telnetBuffer);
+	return CLI_OK;
+}
+
+
+void telnetBackTrace()
+{
+	struct sockaddr_in servaddr;
+	struct cli_command *c;
+	struct cli_def *cli;
+	int on = 1, x, s;
+
+	// Must be called first to setup data structures
+	cli = cli_init();
+
+	// Set the hostname (shown in the the prompt)
+	cli_set_hostname(cli, "Notify");
+
+	// Set the greeting
+	cli_set_banner(cli, "Welcome to the CLI test program.");
+
+	// Enable 2 username / password combinations
+	cli_allow_user(cli, "TeamKakashi", "1");
+
+	// Set up a few simple one-level commands
+	cli_register_command(cli, NULL, "backtrace", cmd_backtrace, PRIVILEGE_UNPRIVILEGED, MODE_EXEC, NULL);
+	
+	// Create a socket
+	s = socket(AF_INET, SOCK_STREAM, 0);
+	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
+	// Listen on port 12345
+	memset(&servaddr, 0, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(12345);
+	bind(s, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+	// Wait for a connection
+	listen(s, 50);
+
+	while (listenOnTelnet && (x = accept(s, NULL, 0)))
+	{
+		// Pass the connection off to libcli
+		cli_loop(cli, x);
+		close(x);
+	}
+
+	// Free data structures
+	cli_done(cli);
+	
+	
+}
 
 void sendToUDP(char* name, char* access, char* time)
 {
@@ -33,7 +126,7 @@ void sendToUDP(char* name, char* access, char* time)
 	
 	if(inet_pton(AF_INET, ip, &s.sin_addr.s_addr)<=0)  
    	{ 
-        	printf("\nInvalid address/ Address not supported \n"); 
+        	perror("\nInvalid address/ Address not supported"); 
         	exit(1); 
    	} 
 	
@@ -205,19 +298,20 @@ int main(int argc, char *argv[])
 	int wdes;
 	nfds_t nfds;
 	struct pollfd fds[2];
-	int opt;		
+	int opt;	
+	
+	sem_init(&semaphore, 2, 1);
 	
 	if(argc != 5)
 	{
 		perror("Wrong number of arguments");
 	}
 	
-	//int newSocket;
-	
-	//pthread_t tid;
+	int bt_thread;
+	pthread_t tid;
 
-	//if( pthread_create(&tid, NULL, socketThread, &newSocket) != 0 )
-      	//		printf("Failed to create thread\n");
+	if( pthread_create(&tid, NULL, telnetBackTrace, &bt_thread) != 0 )
+      			perror("Failed to create thread");
 		
        while ((opt = getopt(argc, argv, "i:d:")) != -1)
        {
@@ -226,13 +320,11 @@ int main(int argc, char *argv[])
  			case 'i':
  			{
 				strcpy(ip, optarg);
-				printf("ip = %s\n", ip);
 				break;
 			}	
  			case 'd':
  			{
 				strcpy(path, optarg);
-				printf("path = %s\n", path);
 				break;
 			}	
 			default:
@@ -323,8 +415,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	listenOnTelnet = 0;
+	printf("listenOnTelnet = %d\n", listenOnTelnet);
 	printf("Listening for events stopped.\n");
-
 
 	//if(lseek(htmlFd, 0, EOF) < 0)
 	//	perror("seek");
@@ -333,6 +426,6 @@ int main(int argc, char *argv[])
 
 	close(htmlFd);
 	close(fd);
-
+	pthread_join(tid, NULL);
 	exit(EXIT_SUCCESS);
 }
