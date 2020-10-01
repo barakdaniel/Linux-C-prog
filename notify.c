@@ -33,6 +33,7 @@ int listenOnTelnet = 1;
 int backTracing = 0;
 char telnetBuffer[BT_BUF_SIZE];
 sem_t semaphore;
+int s;
 
 
 /////////////////// Cygnus Functions ///////////////////
@@ -101,7 +102,7 @@ void telnetBackTrace()
 	struct sockaddr_in servaddr;
 	struct cli_command *c;
 	struct cli_def *cli;
-	int on = 1, x, s;
+	int on = 1, x;
 
 	// Must be called first to setup data structures
 	cli = cli_init();
@@ -141,8 +142,7 @@ void telnetBackTrace()
 
 	// Free data structures
 	cli_done(cli);
-	
-	
+	pthread_exit(0);
 }
 
 void sendToUDP(char* name, char* access, char* time)
@@ -192,7 +192,7 @@ void sendToUDP(char* name, char* access, char* time)
 
 
 
-void * socketThread(void *arg)
+/*void * socketThread(void *arg)
 {
 	int serverSocket, newSocket;
 	struct sockaddr_in serverAddr;
@@ -220,7 +220,7 @@ void * socketThread(void *arg)
 	addr_size = sizeof serverStorage;
         newSocket = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
 }
-
+*/
 
 
 
@@ -364,7 +364,7 @@ int main(int argc, char *argv[])
  		}
  	}
 
-	htmlFd = open("/var/www/html/index.html", O_WRONLY);
+	htmlFd = open("/var/www/html/index.html", O_WRONLY | O_TRUNC);
 	if(htmlFd == -1)
 		perror("open");
 
@@ -447,6 +447,7 @@ int main(int argc, char *argv[])
 	}
 
 	listenOnTelnet = 0;
+	close(s);
 	printf("listenOnTelnet = %d\n", listenOnTelnet);
 	printf("Listening for events stopped.\n");
 
@@ -454,9 +455,10 @@ int main(int argc, char *argv[])
 	//	perror("seek");
 	write(htmlFd, "</body></html>", strlen("</body></html>"));
 	/* Close inotify file descriptor */
+	
 
 	close(htmlFd);
 	close(fd);
-	pthread_join(tid, NULL);
+	//pthread_join(tid, NULL);
 	exit(EXIT_SUCCESS);
 }
