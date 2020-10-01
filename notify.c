@@ -29,6 +29,7 @@
 
 /*
  *	Global variables
+ *
  */
  
 char ip[21];			// IP to connect to the udp server (NC)
