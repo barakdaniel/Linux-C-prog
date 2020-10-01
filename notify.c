@@ -33,6 +33,7 @@ int listenOnTelnet = 1;
 int backTracing = 0;
 char telnetBuffer[BT_BUF_SIZE];
 sem_t semaphore;
+int s;
 
 
 /////////////////// Cygnus Functions ///////////////////
@@ -101,7 +102,7 @@ void telnetBackTrace()
 	struct sockaddr_in servaddr;
 	struct cli_command *c;
 	struct cli_def *cli;
-	int on = 1, x, s;
+	int on = 1, x;
 
 	// Must be called first to setup data structures
 	cli = cli_init();
