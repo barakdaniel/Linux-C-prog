@@ -23,27 +23,34 @@
 #include <execinfo.h>
 
 
-#define PORT 5000
-#define TELNET 8000
+#define PORT 5000		//Netcat server port
 #define BT_BUF_SIZE 1024
+#define TELNET_PORT 12345	//Telnet listening port
 
-char ip[21];
+/*
+ *	Global variables
+ */
+ 
+char ip[21];			// IP to connect to the udp server (NC)
 char path[50];
 int listenOnTelnet = 1;
 int backTracing = 0;
 char telnetBuffer[BT_BUF_SIZE];
 sem_t semaphore;
-int s;
+int listenSock;				
 
-
-/////////////////// Cygnus Functions ///////////////////
+/*
+ *	Function: backTrace()
+ *	Description: Using backtrace system call to fill telnetBuffer with the call stack.
+ *
+ */
 
 void backTrace()
 {
 	int j = 0, nptrs = 0;
 	void *buffer[BT_BUF_SIZE];
 	char **strings;
-	char iToChar[12];
+	char iToChar[16];
 	
 	memset(telnetBuffer, 0, sizeof(telnetBuffer));
 	memset(buffer, 0, sizeof(buffer));	
@@ -73,6 +80,12 @@ void backTrace()
 	free(strings);
 }
 
+/*
+ *	Function: Instrumentations
+ *	Description: Profiling our program with backtracing implementation via cyg_enter.
+ *
+ */
+
 void  __attribute__ ((no_instrument_function))  __cyg_profile_func_enter (void *this_fn, void *call_site)
 {
 	if(backTracing)
@@ -83,10 +96,16 @@ void  __attribute__ ((no_instrument_function))  __cyg_profile_func_enter (void *
         }
 }
 
-void  __attribute__ ((no_instrument_function))  __cyg_profile_func_exit (void *this_fn, void *call_site) { }
 
 
-/////////////////// BackTrace - Telnet Functions ///////////////////
+//void  __attribute__ ((no_instrument_function))  __cyg_profile_func_exit (void *this_fn, void *call_site) { }		//	(CHECK) Should we use exit as well???
+
+
+/*
+ *	Function: cmd_backtrace()
+ *	Description: when CLI get "backtrace" message this function called, rising the backtracing flag.
+ *
+ */
 
 int cmd_backtrace(struct cli_def *cli, char *command, char *argv[], int argc)
 {
@@ -97,43 +116,41 @@ int cmd_backtrace(struct cli_def *cli, char *command, char *argv[], int argc)
 }
 
 
+/*
+ *	Function: telnetBackTrace()
+ *	Description: libcli implementation for telnet client connection.
+ *
+ */
+
 void telnetBackTrace()
 {
 	struct sockaddr_in servaddr;
 	struct cli_command *c;
 	struct cli_def *cli;
-	int on = 1, x;
+	int on = 1, x;			// vars for socket handling.
 
-	// Must be called first to setup data structures
+
 	cli = cli_init();
-
-	// Set the hostname (shown in the the prompt)
 	cli_set_hostname(cli, "Notify");
-
-	// Set the greeting
 	cli_set_banner(cli, "Welcome to the CLI test program.");
-
-	// Enable 2 username / password combinations
-	cli_allow_user(cli, "TeamKakashi", "1");
-
-	// Set up a few simple one-level commands
+	cli_allow_user(cli, "UnixClass", "1");
 	cli_register_command(cli, NULL, "backtrace", cmd_backtrace, PRIVILEGE_UNPRIVILEGED, MODE_EXEC, NULL);
 	
 	// Create a socket
-	s = socket(AF_INET, SOCK_STREAM, 0);
-	setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+	listenSock = socket(AF_INET, SOCK_STREAM, 0);
+	setsockopt(listenSock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
 	// Listen on port 12345
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	servaddr.sin_port = htons(12345);
-	bind(s, (struct sockaddr *)&servaddr, sizeof(servaddr));
+	servaddr.sin_port = htons(TELNET_PORT);
+	bind(listenSock, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
 	// Wait for a connection
-	listen(s, 50);
+	listen(listenSock, 50);
 
-	while (listenOnTelnet && (x = accept(s, NULL, 0)))
+	while (listenOnTelnet && (x = accept(listenSock, NULL, 0)))
 	{
 		// Pass the connection off to libcli
 		cli_loop(cli, x);
@@ -144,6 +161,12 @@ void telnetBackTrace()
 	cli_done(cli);
 	pthread_exit(0);
 }
+
+/*
+ *	Function: sendToUDP()
+ *	Description: When theres a notify event, sends a message to the netcat server connection.
+ *
+ */
 
 void sendToUDP(char* name, char* access, char* time)
 {
@@ -189,49 +212,16 @@ void sendToUDP(char* name, char* access, char* time)
 	exit(0);
 }
 
-
-
-
-/*void * socketThread(void *arg)
-{
-	int serverSocket, newSocket;
-	struct sockaddr_in serverAddr;
-	struct sockaddr_storage serverStorage;
-	socklen_t addr_size;
-	
-	//Create the socket. 
-	serverSocket = socket(PF_INET, SOCK_STREAM, 0);
-
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(TELNET);
-	serverAddr.sin_addr.s_addr = INADDR_ANY;
-	memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
-	
-	//Bind the address struct to the socket 
-	bind(serverSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-
-	if(listen(serverSocket,50)==0) 
-	{}
-	else
-	{
-	    perror("telnet");
-	}
-	//Accept call creates a new socket for the incoming connection
-	addr_size = sizeof serverStorage;
-        newSocket = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
-}
-*/
-
-
-
-
-
+/*
+ *	Function: handle_events()
+ *	Description: When an event occurd in the listening directory, handle_event will be called.
+ *	The function writes to apache html page and calls sendToUDP().
+ */
 
 static void handle_events(int fd, int *wd, int htmlFd)
 {
 	char buf[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
 	const struct inotify_event *event;
-	int i;
 	ssize_t len;
 	char *ptr;
     	char timeBuffer[32];
@@ -428,7 +418,7 @@ int main(int argc, char *argv[])
 
 		if (poll_num > 0) {
 
-			if (fds[0].revents & POLLIN) {		// CHECK IF STDIN IS RELEVANT?
+			if (fds[0].revents & POLLIN) {
 
 				/* Console input is available. Empty stdin and quit */
 
@@ -446,19 +436,14 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	listenOnTelnet = 0;
-	close(s);
-	printf("listenOnTelnet = %d\n", listenOnTelnet);
 	printf("Listening for events stopped.\n");
 
-	//if(lseek(htmlFd, 0, EOF) < 0)
-	//	perror("seek");
+	listenOnTelnet = 0;
+	close(listenSock);
 	write(htmlFd, "</body></html>", strlen("</body></html>"));
-	/* Close inotify file descriptor */
 	
-
+	/* Close inotify file descriptor */
 	close(htmlFd);
 	close(fd);
-	//pthread_join(tid, NULL);
 	exit(EXIT_SUCCESS);
 }
