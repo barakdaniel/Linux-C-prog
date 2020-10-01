@@ -14,36 +14,65 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/wait.h>
-#include<pthread.h>
+#include <pthread.h>
 #include <libcli.h>
 #include <signal.h>
 #include <strings.h>
 #include <stdlib.h>
 #include <semaphore.h>
+#include <execinfo.h>
 
 
 #define PORT 5000
 #define TELNET 8000
+#define BT_BUF_SIZE 1024
+
 char ip[21];
 char path[50];
 int listenOnTelnet = 1;
 int backTracing = 0;
-char telnetBuffer[1024];
+char telnetBuffer[BT_BUF_SIZE];
 sem_t semaphore;
 
 
-
-/////////////////// Cygnum Functions ///////////////////
+/////////////////// Cygnus Functions ///////////////////
 
 void backTrace()
 {
-	memset(telnetBuffer, 0, sizeof(telnetBuffer));
-	strcpy(telnetBuffer, "HELLO WORLD!");
+	int j = 0, nptrs = 0;
+	void *buffer[BT_BUF_SIZE];
+	char **strings;
+	char iToChar[12];
 	
+	memset(telnetBuffer, 0, sizeof(telnetBuffer));
+	memset(buffer, 0, sizeof(buffer));	
+	
+
+	nptrs = backtrace(buffer, BT_BUF_SIZE);
+	printf("backtrace() returned %d addresses\n", nptrs);
+
+	/* The call backtrace_symbols_fd(buffer, nptrs, STDOUT_FILENO)
+	would produce similar output to the following: */
+
+	strings = backtrace_symbols(buffer, nptrs);
+	if (strings == NULL) {
+		perror("backtrace_symbols");
+		exit(EXIT_FAILURE);
+	}	
+	
+	for (j = 0; j < nptrs; j++)
+	{
+		sprintf( iToChar, "%d: ", j+1 );
+		strcat(telnetBuffer, iToChar);
+		strcat(telnetBuffer, strings[j]);
+		strcat(telnetBuffer, "\n");
+	}
+	
+
+	free(strings);
 }
 
-void  __attribute__ ((no_instrument_function))  __cyg_profile_func_enter (void *this_fn,
-                                         void *call_site)
+void  __attribute__ ((no_instrument_function))  __cyg_profile_func_enter (void *this_fn, void *call_site)
 {
 	if(backTracing)
 	{
@@ -51,8 +80,10 @@ void  __attribute__ ((no_instrument_function))  __cyg_profile_func_enter (void *
         	backTrace();
         	sem_post(&semaphore);
         }
-
 }
+
+void  __attribute__ ((no_instrument_function))  __cyg_profile_func_exit (void *this_fn, void *call_site) { }
+
 
 /////////////////// BackTrace - Telnet Functions ///////////////////
 
@@ -300,7 +331,7 @@ int main(int argc, char *argv[])
 	struct pollfd fds[2];
 	int opt;	
 	
-	sem_init(&semaphore, 2, 1);
+	sem_init(&semaphore, 0, 0);
 	
 	if(argc != 5)
 	{
