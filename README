@@ -1,0 +1,20 @@
+These are the instructions to run the notify program.
+There are complining instructions and inputs that can be provided to run this process,
+these instructions are due to the Project instruction PDF that was given in the moodle system.
+
+
+Compiling instruction:
+
+
+Plausible insputs:
+
+1. notify flag inpust
+ 1.1. -i
+ 1.2. -d
+
+2. telnet inputs
+
+
+
+3. netcat inputs
+
