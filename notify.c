@@ -22,7 +22,6 @@
 #include <semaphore.h>
 #include <execinfo.h>
 
-
 #define PORT 5000		//Netcat server port
 #define BT_BUF_SIZE 1024
 #define TELNET_PORT 12345	//Telnet listening port
