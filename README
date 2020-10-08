@@ -5,16 +5,28 @@ these instructions are due to the Project instruction PDF that was given in the 
 
 Compiling instruction:
 
-
-Plausible insputs:
-
-1. notify flag inpust
- 1.1. -i
- 1.2. -d
-
-2. telnet inputs
+	gcc -g -finstrument-functions notify.c -o notify -lcli -lpthread
 
 
+insputs options:
+
+1. notify flag inputs exmaples
+	
+	sudo ./notify -i 127.0.0.1 -d ./ 
+
+2. telnet inputs 
+	
+	telnet localhost 12345
+
+	UserName:  UnixClass
+	PassWord: 1
+
+	backtrace
+
+	exit (to finish)
 
 3. netcat inputs
+	
+	netcat -lukp 5000	
+	
 
