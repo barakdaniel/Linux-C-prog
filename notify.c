@@ -26,6 +26,8 @@
 #define BT_BUF_SIZE 1024
 #define TELNET_PORT 12345	//Telnet listening port
 
+
+
 /*
  *	Global variables
  *
@@ -81,7 +83,7 @@ void backTrace()
 }
 
 /*
- *	Function: Instrumentations
+ *	Functions: Instrumentations
  *	Description: Profiling our program with backtracing implementation via cyg_enter.
  *
  */
@@ -96,16 +98,6 @@ void  __attribute__ ((no_instrument_function))  __cyg_profile_func_enter (void *
         }
 }
 
-
-
-//void  __attribute__ ((no_instrument_function))  __cyg_profile_func_exit (void *this_fn, void *call_site) { }		//	(CHECK) Should we use exit as well???
-
-
-/*
- *	Function: cmd_backtrace()
- *	Description: when CLI get "backtrace" message this function called, rising the backtracing flag.
- *
- */
 
 int cmd_backtrace(struct cli_def *cli, char *command, char *argv[], int argc)
 {
@@ -401,7 +393,7 @@ int main(int argc, char *argv[])
 
 	/* Wait for events and/or terminal input */
 
-	write(htmlFd, "<html><body>", strlen("<html><body>"));
+	write(htmlFd, "<html><head>  <meta http-equiv= 'refresh' content= '5'></head><body>", strlen("<html><head>  <meta http-equiv= 'refresh' content= '5'></head><body>"));
 
 
 	printf("Listening for events.\n");
